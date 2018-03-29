@@ -1,4 +1,4 @@
-pragma solidity ^0.4.20;
+pragma solidity 0.4.21;
 
 /*
 * Sensei Kevlar presents...
@@ -165,7 +165,7 @@ contract DivvyUp is ERC20Interface, Owned {
     string public name;
     string public symbol;
     uint8  public dividendFee;
-    uint8 constant public decimals = 18;
+    uint8 public decimals = 18;
     uint256 constant internal tokenPriceInitial = 0.0000001 ether;
     uint256 constant internal tokenPriceIncremental = 0.00000001 ether;
     uint256 constant internal magnitude = 2**64;
@@ -192,16 +192,17 @@ contract DivvyUp is ERC20Interface, Owned {
     /**
     * -- APPLICATION ENTRY POINTS --  
     */
-    function DivvyUp(string aName, string aSymbol, uint8 aDividendFee) 
+    function DivvyUp(string aName, string aSymbol, uint8 aDividendFee, uint8 aDecimals) 
     public {
         require(aDividendFee < 100);
         name = aName;
         symbol = aSymbol;
         dividendFee = aDividendFee;
+        decimals = aDecimals;
     }
     
     /**
-     * The Owner can rebrand
+     * Allows the owner to change the name of the contract
      */
     function changeName(string newName) onlyOwner() public {
         name = newName;
@@ -209,7 +210,7 @@ contract DivvyUp is ERC20Interface, Owned {
     }
     
     /**
-     * The Owner can change the symbol
+     * Allows the owner to change the symbol of the contract
      */
     function changeSymbol(string newSymbol) onlyOwner() public {
         symbol = newSymbol;
@@ -238,8 +239,8 @@ contract DivvyUp is ERC20Interface, Owned {
     }
     
     /**
-     * Fallback function to handle ethereum that was send straight to the contract
-    
+     * Fallback function to handle ethereum that was send straight to the contract.
+     * Causes tokens to be purchased.
      */
     function()
         payable
@@ -353,6 +354,9 @@ contract DivvyUp is ERC20Interface, Owned {
     
     /**
      * Transfer tokens from the caller to a new holder.
+     * Transfering ownership of tokens requires settling ououtstanding dividends
+     * and transfering them back. You can therefore send 0 tokens to this contract to
+     * trigger your withdraw.
      */
     function transfer(address toAddress, uint256 amountOfTokens)
         onlyTokenHolders()
@@ -373,6 +377,12 @@ contract DivvyUp is ERC20Interface, Owned {
 
             return true;
         }
+        
+        // Deal with outstanding dividends first
+        if(myDividends(true) > 0) {
+            withdraw();
+        }
+        
         // setup
         address customerAddress = msg.sender;
         
@@ -467,6 +477,21 @@ contract DivvyUp is ERC20Interface, Owned {
         return address(this).balance;
     }
     
+    /**
+     * Retrieve the name of the token.
+     */
+     function name() public view returns(string){
+         return name;
+     }
+     
+
+    /**
+     * Retrieve the symbol of the token.
+     */
+     function symbol() public view returns(string){
+         return symbol;
+     }
+     
     /**
      * Retrieve the total token supply.
      */
