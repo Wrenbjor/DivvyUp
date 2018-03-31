@@ -221,8 +221,8 @@ contract DivvyUpICO is Owned, ERC20Interface {
 
     bytes32 internal _name;
     bytes32 internal _symbol;
-    string internal name;
-    string internal symbol;
+    string internal iconame;
+    string internal icosymbol;
     uint8 public finalDecimals;
     uint8 public dividendDivisor;
     uint256 public initialPrice;
@@ -279,9 +279,9 @@ contract DivvyUpICO is Owned, ERC20Interface {
 
     function DivvyUpICO(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 anInitialPrice, uint256 anIncrementPrice, uint256 aMagnitude, uint256 aLaunchBlockHeight, uint256 aLaunchBalanceTarget, uint256 aLaunchBalanceCap, DivvyUpFactory aFactory) public {
         _name = aName;
-        name = concat(bytes32ToString(aName), "ICO"));
+        iconame = concat(bytes32ToString(aName), "ICO");
         _symbol = aSymbol;
-        symbol = concat(bytes32ToString(aSymbol), "ICO");
+        icosymbol = concat(bytes32ToString(aSymbol), "ICO");
         dividendDivisor = aDividendDivisor;
         finalDecimals = aDecimals;
         initialPrice = anInitialPrice;
@@ -306,11 +306,11 @@ contract DivvyUpICO is Owned, ERC20Interface {
 
 
     function name() public view returns(bytes32){
-        return name;
+        return iconame;
     }
 
     function symbol() public view returns(bytes32){
-        return symbol;
+        return icosymbol;
     }
 
     function decimals() public view returns(uint8){
