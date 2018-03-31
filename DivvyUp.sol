@@ -124,6 +124,30 @@ contract DivvyUpFactory is Owned {
         _;
     }
 
+    event DivvyUpCreated(
+        bytes32 name,
+        bytes32 symbol,
+        uint8 dividendDivisor,
+        uint8 decimals,
+        uint256 initialPrice,
+        uint256 incrementPrice,
+        uint256 magnitude,
+        address creator
+    );
+
+    event DivvyUpICOCreated(bytes32 name,
+        bytes32 symbol,
+        uint8 dividendDivisor,
+        uint8 decimals,
+        uint256 initialPrice,
+        uint256 incrementPrice,
+        uint256 magnitude,
+        uint256 launchBlockHeight,
+        uint256 launchBalanceTarget,
+        uint256 launchBalanceCap,
+        address creator
+    );
+
     mapping(address => DivvyUp[]) public registry;
 
     function() public payable onlyZeroSpend {
@@ -221,8 +245,8 @@ contract DivvyUpICO is Owned, ERC20Interface {
 
     bytes32 internal _name;
     bytes32 internal _symbol;
-    string internal iconame;
-    string internal icosymbol;
+    bytes32 internal iconame;
+    bytes32 internal icosymbol;
     uint8 public finalDecimals;
     uint8 public dividendDivisor;
     uint256 public initialPrice;
@@ -239,7 +263,7 @@ contract DivvyUpICO is Owned, ERC20Interface {
     mapping(address => mapping(address => uint)) allowed;
     uint256 public totalDeposits;
 
-    function concat(string _base, string _value) internal returns (string) {
+    function concat(string _base, string _value) internal pure returns (string) {
         bytes memory _baseBytes = bytes(_base);
         bytes memory _valueBytes = bytes(_value);
 
@@ -260,7 +284,7 @@ contract DivvyUpICO is Owned, ERC20Interface {
         return string(_newValue);
     }
 
-    function bytes32ToString(bytes32 x) internal returns (string) {
+    function bytes32ToString(bytes32 x) internal pure returns (string) {
         bytes memory bytesString = new bytes(32);
         uint256 charCount = 0;
         for (uint j = 0; j < 32; j++) {
@@ -277,11 +301,21 @@ contract DivvyUpICO is Owned, ERC20Interface {
         return string(bytesStringTrimmed);
     }
 
+    function stringToBytes32(string memory source) internal pure returns (bytes32 result) {
+        bytes memory tempEmptyStringTest = bytes(source);
+        if (tempEmptyStringTest.length == 0) {
+            return 0x0;
+        }
+
+        assembly {
+            result := mload(add(source, 32))
+        }
+    }
     function DivvyUpICO(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 anInitialPrice, uint256 anIncrementPrice, uint256 aMagnitude, uint256 aLaunchBlockHeight, uint256 aLaunchBalanceTarget, uint256 aLaunchBalanceCap, DivvyUpFactory aFactory) public {
         _name = aName;
-        iconame = concat(bytes32ToString(aName), "ICO");
+        iconame = stringToBytes32(concat(bytes32ToString(aName), "ICO"));
         _symbol = aSymbol;
-        icosymbol = concat(bytes32ToString(aSymbol), "ICO");
+        icosymbol = stringToBytes32(concat(bytes32ToString(aSymbol), "ICO"));
         dividendDivisor = aDividendDivisor;
         finalDecimals = aDecimals;
         initialPrice = anInitialPrice;
