@@ -65,16 +65,6 @@ contract Owned {
         require(msg.sender == ownerCandidate);  
         owner = ownerCandidate;
     }
-
-    /**
-    * Owner can transfer out any accidentally sent ERC20 tokens
-    * 
-    * Implementation taken from ERC20 reference
-    * 
-    */
-    function transferAnyERC20Token(address tokenAddress, uint tokens) public onlyOwner returns (bool success) {
-        return ERC20Interface(tokenAddress).transfer(owner, tokens);
-    }
     
 }
 
@@ -142,7 +132,7 @@ contract DivvyUpFairLaunch is Owned {
     }
 
     modifier isReadyToLaunch(){
-        require((block.number > launchBlockHeight || launchBlockHeight == 0) && (this.balance >= launchBalanceTarget));
+        require((block.number > launchBlockHeight || launchBlockHeight == 0) && (address(this).balance >= launchBalanceTarget));
         _;
     }
 
@@ -179,43 +169,81 @@ contract DivvyUpFairLaunch is Owned {
         launchBlockHeight = aLaunchBlockHeight;
         launchBalanceTarget = aLaunchBalanceTarget;
         factory = aFactory;
-        require(launchBlockHeight > block.number || launchBalanceTarget > 0);
     }
 
-    function() public payable positiveSpend() {
+    function() public payable {
+        if(msg.value == 0 && hasLaunched){
+            withdraw();
+            return;
+        }
+        require(msg.value > 0);
         deposits[msg.sender] += msg.value;
         totalDeposits += msg.value;
     }
 
-    function launch() public hasNotLaunched() isReadyToLaunch() returns (address) {
+    function launch() public hasNotLaunched isReadyToLaunch returns (address) {
         hasLaunched = true;
         destination = factory.create(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude);
         destination.changeOwner(owner);
         if(address(this).balance > 0){
-            destination.purchaseTokens.value(totalDeposits)();
+            destination.purchaseTokens.value(address(this).balance)();
         }
     }
 
-    function retrieve() public hasAlreadyLaunched() balanceHolder() {
+    function retrieve() public hasAlreadyLaunched balanceHolder {
         uint256 amount = totalDeposits.div(deposits[msg.sender]);
         totalDeposits -= deposits[msg.sender];
         delete deposits[msg.sender];
         require(destination.transfer(msg.sender, destination.balanceOf(this).div(amount)));
     }
 
-    function withdraw() public hasNotLaunched() balanceHolder() returns (uint256) {
-        return withdraw(deposits[msg.sender]);
+    function myBalance() public view returns (uint256) {
+        return balanceOf(msg.sender);
     }
 
-    function withdraw(uint256 amount) public hasNotLaunched() balanceHolder() returns (uint256) {
-        require(amount <= deposits[msg.sender]);
-        totalDeposits -= amount;
-        deposits[msg.sender] -= amount;
-        if(deposits[msg.sender] == 0){
-            delete deposits[msg.sender];
+    function balanceOf(address anAddress) public view returns (uint256){
+        if(!hasLaunched){
+            return deposits[anAddress];
+        }else{
+            return destination.balanceOf(anAddress);
         }
-        msg.sender.transfer(amount);
-        return amount;
+    }
+
+
+    function withdraw() public balanceHolder returns (bool) {
+        if(hasLaunched){
+            retrieve
+        }
+        totalDeposits -= deposits[msg.sender];
+        delete deposits[msg.sender];
+        if(!hasLaunched){
+            msg.sender.transfer(amount);
+        }else{
+            require(destination.transfer(msg.sender, destination.balanceOf(this).div(amount)));
+        }
+        return true;
+    }
+
+    function die() public {
+        if(!hasLaunched){
+            require(owner == msg.sender && address(this).balance == 0);
+        }else{
+            require(totalDeposits == 0);
+            destination.withdraw();
+        }
+        selfdestruct(owner);
+    }
+
+    /**
+    * Owner can transfer out any accidentally sent ERC20 tokens
+    * 
+    * Implementation taken from ERC20 reference
+    * 
+    */
+    function transferAnyERC20Token(address tokenAddress, uint tokens) public onlyOwner returns (bool success) {
+        // Do not allow the owner to prematurely steal tokens that do not belong to them
+        require(tokenAddress != address(destination));
+        return ERC20Interface(tokenAddress).transfer(owner, tokens);
     }
 
 }
@@ -229,9 +257,28 @@ contract DivvyUpFactory is Owned {
 
     mapping(address => DivvyUp[]) public registry;
 
-
-    function() public payable onlyZeroSpend() {
+    function() public payable onlyZeroSpend {
         create("DivvyUp", "DUP", uint8(msg.data[0]));
+    }
+
+    // The Gentlemen's Agreement
+    function createFairLaunch(bytes32 name, bytes32 symbol, uint8 dividendDivisor, uint8 decimals, uint256 initialPrice, uint256 incrementPrice, uint256 magnitude) public returns (DivvyUpFairLaunch){
+        return new DivvyUpFairLaunch(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 0, 0, this);
+    }
+
+    // Fundraiser
+    function createBalanceFairLaunch(bytes32 name, bytes32 symbol, uint8 dividendDivisor, uint8 decimals, uint256 initialPrice, uint256 incrementPrice, uint256 magnitude, uint256 launchBalanceTarget) public returns (DivvyUpFairLaunch){
+        return new DivvyUpFairLaunch(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 0, launchBalanceTarget, this);
+    }
+
+    // Timed
+    function createBlockHeightFairLaunch(bytes32 name, bytes32 symbol, uint8 dividendDivisor, uint8 decimals, uint256 initialPrice, uint256 incrementPrice, uint256 magnitude, uint256 launchBlockHeight) public returns (DivvyUpFairLaunch){
+        return new DivvyUpFairLaunch(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, launchBlockHeight, 0, this);
+    }
+
+    // Timed And Fundraiser
+    function createBalanceAndBlockHeightFairLaunch(bytes32 name, bytes32 symbol, uint8 dividendDivisor, uint8 decimals, uint256 initialPrice, uint256 incrementPrice, uint256 magnitude, uint256 launchBlockHeight, uint256 launchBalanceTarget) public returns (DivvyUpFairLaunch){
+        return new DivvyUpFairLaunch(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, launchBlockHeight, launchBalanceTarget, this);
     }
 
     function create(bytes32 name, bytes32 symbol)
@@ -259,10 +306,24 @@ contract DivvyUpFactory is Owned {
         public 
         returns(DivvyUp)
     {
-        DivvyUp divvyUp = new DivvyUp(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude);
+        DivvyUp divvyUp = new DivvyUp(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 1);
         divvyUp.changeOwner(msg.sender);
         registry[msg.sender].push(divvyUp);
         return divvyUp;
+    }
+
+    function die() onlyOwner() public {
+        selfdestruct(msg.sender);
+    }
+
+    /**
+    * Owner can transfer out any accidentally sent ERC20 tokens
+    * 
+    * Implementation taken from ERC20 reference
+    * 
+    */
+    function transferAnyERC20Token(address tokenAddress, uint tokens) public onlyOwner returns (bool success) {
+        return ERC20Interface(tokenAddress).transfer(owner, tokens);
     }
 }
 
@@ -316,10 +377,10 @@ contract DivvyUp is ERC20Interface, Owned {
     bytes32 public name;
     bytes32 public symbol;
     uint8  public dividendDivisor;
-    uint8 public decimals = 18;
-    uint256 public tokenPriceInitial = 0.0000001 ether;
-    uint256 public tokenPriceIncremental = 0.00000001 ether;
-    uint256 public magnitude = 2**64;
+    uint8 public decimals;// = 18;
+    uint256 public tokenPriceInitial;// = 0.0000001 ether;
+    uint256 public tokenPriceIncremental;// = 0.00000001 ether;
+    uint256 public magnitude;// = 2**64;
     //0 = ignored, 1 = allowed, 2 = mandatory
     uint8 public referrals;
 
@@ -345,7 +406,7 @@ contract DivvyUp is ERC20Interface, Owned {
     /**
     * -- APPLICATION ENTRY POINTS --  
     */
-    function DivvyUp(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 aTokenPriceInitial, uint256 aTokenPriceIncremental, uint256 aMagnitude) 
+    function DivvyUp(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 aTokenPriceInitial, uint256 aTokenPriceIncremental, uint256 aMagnitude, uint8 aReferrals) 
     public {
         require(aDividendDivisor < 100);
         name = aName;
@@ -355,6 +416,8 @@ contract DivvyUp is ERC20Interface, Owned {
         tokenPriceInitial = aTokenPriceInitial;
         tokenPriceIncremental = aTokenPriceIncremental;
         magnitude = aMagnitude;
+        referrals = aReferrals;
+        require(referrals <= 2);
     }
     
     /**
@@ -515,7 +578,7 @@ contract DivvyUp is ERC20Interface, Owned {
      * trigger your withdraw.
      */
     function transfer(address toAddress, uint256 amountOfTokens)
-        onlyTokenHolders()
+        onlyTokenHolders
         public
         returns(bool)
     {
@@ -529,7 +592,7 @@ contract DivvyUp is ERC20Interface, Owned {
             // Send them their ETH
             withdraw();
             // fire event
-            emit Transfer(0x0, customerAddress, amountOfTokens);
+            emit Transfer(0x0, msg.sender, amountOfTokens);
 
             return true;
         }
@@ -539,6 +602,18 @@ contract DivvyUp is ERC20Interface, Owned {
             withdraw();
         }
         
+        return _transfer(toAddress, amountOfTokens);
+    }
+
+    function transferWithDividends(address toAddress, uint256 amountOfTokens) public onlyTokenHolders returns (bool) {
+        return _transfer(toAddress, amountOfTokens);
+    }
+
+    function _transfer(address toAddress, uint256 amountOfTokens)
+        internal
+        onlyTokenHolders
+        returns(bool)
+    {
         // setup
         address customerAddress = msg.sender;
         
@@ -885,5 +960,15 @@ contract DivvyUp is ERC20Interface, Owned {
             y = z;
             z = (x / z + z) / 2;
         }
+    }
+
+    /**
+    * Owner can transfer out any accidentally sent ERC20 tokens
+    * 
+    * Implementation taken from ERC20 reference
+    * 
+    */
+    function transferAnyERC20Token(address tokenAddress, uint tokens) public onlyOwner returns (bool success) {
+        return ERC20Interface(tokenAddress).transfer(owner, tokens);
     }
 }
