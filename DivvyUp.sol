@@ -172,7 +172,7 @@ contract DivvyUpFactory is Owned {
 
     // Timed And Fundraiser
     function createBalanceAndBlockHeightICO(bytes32 name, bytes32 symbol, uint8 dividendDivisor, uint8 decimals, uint256 initialPrice, uint256 incrementPrice, uint256 magnitude, uint256 launchBlockHeight, uint256 launchBalanceTarget, uint256 launchBalanceCap) public returns (DivvyUpICO){
-        DivvyUpICO ico = new DivvyUpICO(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, launchBlockHeight, launchBalanceTarget, launchBalanceCap, this);
+        DivvyUpICO ico = new DivvyUpICO(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, launchBlockHeight, launchBalanceTarget, launchBalanceCap, 0x0, this);
         ico.changeOwner(msg.sender);
         icoRegistry[msg.sender].push(ico);
         emit ICOCreate(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 0, 0, launchBalanceCap, msg.sender);        
@@ -183,28 +183,28 @@ contract DivvyUpFactory is Owned {
         public 
         returns(DivvyUp)
     {
-        return create(name, symbol, 10, 18, 0.0000001 ether, 0.00000001 ether, 2**64);
+        return create(name, symbol, 10, 18, 0.0000001 ether, 0.00000001 ether, 2**64, 0x0);
     }
 
     function create(bytes32 name, bytes32 symbol, uint8 dividendDivisor)
         public 
         returns(DivvyUp)
     {
-        return create(name, symbol, dividendDivisor, 18, 0.0000001 ether, 0.00000001 ether, 2**64);
+        return create(name, symbol, dividendDivisor, 18, 0.0000001 ether, 0.00000001 ether, 2**64, 0x0);
     }
 
     function create(bytes32 name, bytes32 symbol, uint8 dividendDivisor, uint8 decimals)
         public 
         returns(DivvyUp)
     {
-        return create(name, symbol, dividendDivisor, decimals, 0.0000001 ether, 0.00000001 ether, 2**64);
+        return create(name, symbol, dividendDivisor, decimals, 0.0000001 ether, 0.00000001 ether, 2**64, 0x0);
     }
 
-    function create(bytes32 name, bytes32 symbol, uint8 dividendDivisor, uint8 decimals, uint256 initialPrice, uint256 incrementPrice, uint256 magnitude)
+    function create(bytes32 name, bytes32 symbol, uint8 dividendDivisor, uint8 decimals, uint256 initialPrice, uint256 incrementPrice, uint256 magnitude, address counter)
         public 
         returns(DivvyUp)
     {
-        DivvyUp divvyUp = new DivvyUp(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 1, 0x0);
+        DivvyUp divvyUp = new DivvyUp(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 1, counter);
         divvyUp.changeOwner(msg.sender);
         registry[msg.sender].push(divvyUp);
         emit Create(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, msg.sender);
@@ -342,10 +342,24 @@ contract DivvyUpICO is Owned, ERC20Interface {
             withdraw(msg.sender, balanceOf(msg.sender));
             return;
         }
+        require(!hasLaunched);
         require(launchBalanceCap == 0 || totalDeposits.add(msg.value) <= launchBalanceCap);
         require(counter == 0x0);
         deposits[msg.sender] += msg.value;
         totalDeposits += msg.value;
+    }
+
+    function depositERC20(uint256 amount) public {
+        if(amount == 0 && hasLaunched){
+            withdraw(msg.sender, balanceOf(msg.sender));
+            return;
+        }
+        require(!hasLaunched);
+        require(launchBalanceCap == 0 || totalDeposits.add(amount) <= launchBalanceCap);
+        require(counter != 0x0);
+        require(ERC20Interface(counter).transferFrom(msg.sender, this, amount));
+        deposits[msg.sender] += amount;
+        totalDeposits += amount;
     }
 
 
@@ -367,13 +381,14 @@ contract DivvyUpICO is Owned, ERC20Interface {
 
     function launch() public hasNotLaunched isReadyToLaunch returns (address) {
         hasLaunched = true;
-        destination = factory.create(_name, _symbol, dividendDivisor, finalDecimals, initialPrice, incrementPrice, magnitude);
+        destination = factory.create(_name, _symbol, dividendDivisor, finalDecimals, initialPrice, incrementPrice, magnitude, counter);
         destination.changeOwner(owner);
-        if(totalDeposits > 0){}
-        if(counter == 0x0){
-            destination.purchaseTokens.value(address(this).balance)();
-        } else {
-            destination.purchaseTokensERC20.value(totalDeposits);
+        if(totalDeposits > 0){
+            if(counter == 0x0){
+                destination.purchaseTokens.value(totalDeposits)();
+            } else {
+                destination.purchaseTokensERC20(totalDeposits);
+            }
         }
     }
 
@@ -391,7 +406,7 @@ contract DivvyUpICO is Owned, ERC20Interface {
 
     function totalSupply() public view returns (uint256){
         if(!hasLaunched){
-            return address(this).balance;
+            return totalDeposits;
         }else{
             return destination.balanceOf(this);
         }
@@ -476,7 +491,11 @@ contract DivvyUpICO is Owned, ERC20Interface {
             if(deposits[msg.sender] == 0){
                 delete deposits[msg.sender];
             }
-            anAddress.transfer(amount);
+            if(counter == 0x0){
+                anAddress.transfer(amount);
+            } else{
+                require(ERC20Interface(counter).transfer(anAddress, amount));
+            }
         }
         return true;
     }
@@ -487,6 +506,12 @@ contract DivvyUpICO is Owned, ERC20Interface {
         }else{
             require(totalDeposits == 0);
             destination.withdraw();
+        }
+        if(counter != 0x0){
+            uint256 balance = ERC20Interface(counter).balanceOf(this);
+            if(balance > 0){
+                require(ERC20Interface(counter).transfer(msg.sender, balance));
+            }
         }
         selfdestruct(owner);
     }
@@ -590,7 +615,7 @@ contract DivvyUp is ERC20Interface, Owned {
     /**
     * -- APPLICATION ENTRY POINTS --  
     */
-    function DivvyUp(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 aTokenPriceInitial, uint256 aTokenPriceIncremental, uint256 aMagnitude, uint8 aReferrals, address aDestination) 
+    function DivvyUp(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 aTokenPriceInitial, uint256 aTokenPriceIncremental, uint256 aMagnitude, uint8 aReferrals, address aCounter) 
     public {
         require(aDividendDivisor < 100);
         name = aName;
@@ -601,7 +626,7 @@ contract DivvyUp is ERC20Interface, Owned {
         tokenPriceIncremental = aTokenPriceIncremental;
         magnitude = aMagnitude;
         referrals = aReferrals;
-        counter = aDestination;    
+        counter = aCounter;    
         require(referrals <= 2);
     }
     
@@ -770,9 +795,9 @@ contract DivvyUp is ERC20Interface, Owned {
         // russian hackers BTFO
         require(amountOfTokens <= tokenBalanceLedger[customerAddress]);
         uint256 tokens = amountOfTokens;
-        uint256 counter = tokensToDestination(tokens);
-        uint256 dividends = dividendDivisor > 0 ? SafeMath.div(counter, dividendDivisor) : 0;
-        uint256 taxedCounter = SafeMath.sub(counter, dividends);
+        uint256 counterAmount = tokensToDestination(tokens);
+        uint256 dividends = dividendDivisor > 0 ? SafeMath.div(counterAmount, dividendDivisor) : 0;
+        uint256 taxedCounter = SafeMath.sub(counterAmount, dividends);
         
         // burn the sold tokens
         tokenSupply = SafeMath.sub(tokenSupply, tokens);
@@ -1016,9 +1041,9 @@ contract DivvyUp is ERC20Interface, Owned {
         if(tokenSupply == 0){
             return tokenPriceInitial - tokenPriceIncremental;
         } else {
-            uint256 counter = tokensToDestination(1e18);
-            uint256 dividends = SafeMath.div(counter, dividendDivisor);
-            uint256 taxedCounter = SafeMath.sub(counter, dividends);
+            uint256 counterAmount = tokensToDestination(1e18);
+            uint256 dividends = SafeMath.div(counterAmount, dividendDivisor);
+            uint256 taxedCounter = SafeMath.sub(counterAmount, dividends);
             return taxedCounter;
         }
     }
@@ -1035,9 +1060,9 @@ contract DivvyUp is ERC20Interface, Owned {
         if(tokenSupply == 0){
             return tokenPriceInitial + tokenPriceIncremental;
         } else {
-            uint256 counter = tokensToDestination(1e18);
-            uint256 dividends = SafeMath.div(counter, dividendDivisor);
-            uint256 taxedCounter = SafeMath.add(counter, dividends);
+            uint256 counterAmount = tokensToDestination(1e18);
+            uint256 dividends = SafeMath.div(counterAmount, dividendDivisor);
+            uint256 taxedCounter = SafeMath.add(counterAmount, dividends);
             return taxedCounter;
         }
     }
@@ -1066,9 +1091,9 @@ contract DivvyUp is ERC20Interface, Owned {
         returns(uint256)
     {
         require(tokensToSell <= tokenSupply);
-        uint256 counter = tokensToDestination(tokensToSell);
-        uint256 dividends = SafeMath.div(counter, dividendDivisor);
-        uint256 taxedCounter = SafeMath.sub(counter, dividends);
+        uint256 counterAmount = tokensToDestination(tokensToSell);
+        uint256 dividends = SafeMath.div(counterAmount, dividendDivisor);
+        uint256 taxedCounter = SafeMath.sub(counterAmount, dividends);
         return taxedCounter;
     }
     
@@ -1145,14 +1170,14 @@ contract DivvyUp is ERC20Interface, Owned {
      * It's an algorithm, hopefully we gave you the whitepaper with it in scientific notation;
      * Some conversions occurred to prevent decimal errors or underflows / overflows in solidity code.
      */
-    function counterToTokens(uint256 counter)
+    function counterToTokens(uint256 counterAmount)
         internal
         view
         returns(uint256)
     {
         uint256 tokenPrice = tokenPriceInitial * 1e18;
         // underflow attempts BTFO
-        uint256 tokensReceived = ((SafeMath.sub((sqrt((tokenPrice**2)+(2*(tokenPriceIncremental * 1e18)*(counter * 1e18))+(((tokenPriceIncremental)**2)*(tokenSupply**2))+(2*(tokenPriceIncremental)*tokenPrice*tokenSupply))), tokenPrice))/(tokenPriceIncremental))-(tokenSupply);  
+        uint256 tokensReceived = ((SafeMath.sub((sqrt((tokenPrice**2)+(2*(tokenPriceIncremental * 1e18)*(counterAmount * 1e18))+(((tokenPriceIncremental)**2)*(tokenSupply**2))+(2*(tokenPriceIncremental)*tokenPrice*tokenSupply))), tokenPrice))/(tokenPriceIncremental))-(tokenSupply);  
         return tokensReceived;
     }
     
