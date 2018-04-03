@@ -158,17 +158,18 @@ contract DivvyUpFactory is Owned {
         uint256 magnitude, //magnitude to multiply the fees by before distribution. Example: 2**64
         uint8 referrals, // Referrals disallowed, allowed, or mandatory. Example: 0 disallowed, 1 allowed, 2 mandatory
         uint256 referralDivisor, // Amount to divide the fees by. Example: 3 for 30%, 10 for 10%, 100 for 1%
-        address counter, // The counter currency to accept. Example: 0x0 for ETH, otherwise the ERC20 token address.
         uint256 launchBlockHeight, // Block this won't launch before, or 0 for any block.
         uint256 launchBalanceTarget, // Balance this wont launch before, or 0 or any balance. (soft cap)
-        uint256 launchBalanceCap // Balance this will not exceed, or 0 for no cap. (hard cap)
+        uint256 launchBalanceCap, // Balance this will not exceed, or 0 for no cap. (hard cap)
+        address counter // The counter currency to accept. Example: 0x0 for ETH, otherwise the ERC20 token address.
         )
         public 
         returns (DivvyUpICO)
     {
-        DivvyUpICO ico = new DivvyUpICO(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, launchBlockHeight, launchBalanceTarget, launchBalanceCap, 0x0, this);
+        DivvyUpICO ico = new DivvyUpICO(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, referrals, referralDivisor, launchBlockHeight, launchBalanceTarget, launchBalanceCap, counter, this);
         ico.changeOwner(msg.sender);
         icoRegistry.push(ico);
+        
         emit ICOCreate(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 0, 0, launchBalanceCap, msg.sender);        
         return ico;   
     }
@@ -236,6 +237,7 @@ contract DivvyUpICO is Owned, ERC20Interface {
 
     bytes32 internal _name;
     bytes32 internal _symbol;
+    string internal icotmp;
     bytes32 internal iconame;
     bytes32 internal icosymbol;
     uint8 public finalDecimals;
@@ -308,7 +310,8 @@ contract DivvyUpICO is Owned, ERC20Interface {
     }
     function DivvyUpICO(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 anInitialPrice, uint256 anIncrementPrice, uint256 aMagnitude, uint8 aReferrals, uint256 aReferralDivisor, uint256 aLaunchBlockHeight, uint256 aLaunchBalanceTarget, uint256 aLaunchBalanceCap, address aCounter, DivvyUpFactory aFactory) public {
         _name = aName;
-        iconame = stringToBytes32(concat(bytes32ToString(aName), "ICO"));
+        icotmp = concat(bytes32ToString(aName), "ICO");
+        iconame = stringToBytes32(icotmp);
         _symbol = aSymbol;
         icosymbol = stringToBytes32(concat(bytes32ToString(aSymbol), "ICO"));
         dividendDivisor = aDividendDivisor;
@@ -317,7 +320,7 @@ contract DivvyUpICO is Owned, ERC20Interface {
         incrementPrice = anIncrementPrice;
         magnitude = aMagnitude;
         referrals = aReferrals;
-        referralDivisor = aReferralsDivisor;
+        referralDivisor = aReferralDivisor;
         launchBlockHeight = aLaunchBlockHeight;
         launchBalanceTarget = aLaunchBalanceTarget;
         launchBalanceCap = aLaunchBalanceCap;
