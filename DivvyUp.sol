@@ -117,7 +117,7 @@ library SafeMath {
 }
 
 contract DivvyUpFactoryInterface {
-     function create(
+    function create(
         bytes32 name, // Name of the DivvyUp
         bytes32 symbol,  // ERC20 Symbol fo the DivvyUp
         uint8 dividendDivisor, // Amount to divide incoming counter by as fees for dividens. Example: 3 for 33%, 10 for 10%, 100 for 1%
