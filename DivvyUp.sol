@@ -166,7 +166,7 @@ contract DivvyUpFactory is Owned {
         public 
         returns (DivvyUpICO)
     {
-        DivvyUpICO ico = new DivvyUpICO(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, launchBlockHeight, launchBalanceTarget, launchBalanceCap, 0x0, this);
+        DivvyUpICO ico = new DivvyUpICO(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, referrals, referralDivisor, launchBlockHeight, launchBalanceTarget, launchBalanceCap, 0x0, this);
         ico.changeOwner(msg.sender);
         icoRegistry.push(ico);
         emit ICOCreate(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 0, 0, launchBalanceCap, msg.sender);        
@@ -243,8 +243,8 @@ contract DivvyUpICO is Owned, ERC20Interface {
     uint256 public initialPrice;
     uint256 public incrementPrice;
     uint256 public magnitude;
-    uint8 referrals; // Referrals disallowed, allowed, or mandatory. Example: 0 disallowed, 1 allowed, 2 mandatory
-    uint256 referralDivisor; // Amount to divide the fees by. Example: 3 for 30%, 10 for 10%, 100 for 1%
+    uint8 referrals; 
+    uint256 referralDivisor;
     uint256 public launchBlockHeight = 0;
     uint256 public launchBalanceTarget = 0;
     uint256 public launchBalanceCap = 0;
@@ -317,7 +317,7 @@ contract DivvyUpICO is Owned, ERC20Interface {
         incrementPrice = anIncrementPrice;
         magnitude = aMagnitude;
         referrals = aReferrals;
-        referralDivisor = aReferralsDivisor;
+        referralDivisor = aReferralDivisor;
         launchBlockHeight = aLaunchBlockHeight;
         launchBalanceTarget = aLaunchBalanceTarget;
         launchBalanceCap = aLaunchBalanceCap;
