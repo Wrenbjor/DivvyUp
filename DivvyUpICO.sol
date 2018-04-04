@@ -286,7 +286,7 @@ contract DivvyUpICO is Owned, ERC20Interface {
             result := mload(add(source, 32))
         }
     }
-    function DivvyUpICO(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 anInitialPrice, uint256 anIncrementPrice, uint256 aMagnitude, uint8 aReferrals, uint256 aReferralDivisor, uint256 aLaunchBlockHeight, uint256 aLaunchBalanceTarget, uint256 aLaunchBalanceCap, address aCounter, DivvyUpFactory aFactory) public {
+    function DivvyUpICO(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 anInitialPrice, uint256 anIncrementPrice, uint256 aMagnitude, uint8 aReferrals, uint256 aReferralDivisor, uint256 aLaunchBlockHeight, uint256 aLaunchBalanceTarget, uint256 aLaunchBalanceCap, address aCounter, address aFactory) public {
         _name = aName;
         _symbol = aSymbol;
         dividendDivisor = aDividendDivisor;
