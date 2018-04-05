@@ -174,7 +174,7 @@ contract DivvyUpICOFactory is Owned {
         uint8 referrals, // Referrals disallowed, allowed, or mandatory. Example: 0 disallowed, 1 allowed, 2 mandatory
         uint256 referralDivisor, // Amount to divide the fees by. Example: 3 for 30%, 10 for 10%, 100 for 1%
         uint256 launchBlockHeight, // Block this won't launch before, or 0 for any block.
-        uint256 launchBalanceTarget, // Balance this wont launch before, or 0 or any balance. (soft cap)
+        uint256 launchBalanceTarget, // Balance this wont launch before, or 0 for any balance. (soft cap)
         uint256 launchBalanceCap, // Balance this will not exceed, or 0 for no cap. (hard cap)
         address counter // The counter currency to accept. Example: 0x0 for ETH, otherwise the ERC20 token address.
         )
