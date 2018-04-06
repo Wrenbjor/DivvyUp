@@ -133,7 +133,8 @@ contract DivvyUpFactoryInterface {
     function create(
         bytes32 name, // Name of the DivvyUp
         bytes32 symbol,  // ERC20 Symbol fo the DivvyUp
-        uint8 dividendDivisor, // Amount to divide incoming counter by as fees for dividens. Example: 3 for 33%, 10 for 10%, 100 for 1%
+        uint8 buyDividendDivisor, // Amount to divide incoming counter by as fees for dividens. Example: 3 for 33%, 10 for 10%, 100 for 1%
+        uint8 sellDividendDivisor, // Amount to divide outgoing counter by as fees for dividens. Example: 3 for 33%, 10 for 10%, 100 for 1%
         uint8 decimals, // Number of decimals the token has. Example: 18
         uint256 initialPrice, // Starting price per token. Example: 0.0000001 ether
         uint256 incrementPrice, // How much to increment the price by. Example: 0.00000001 ether
@@ -149,7 +150,8 @@ contract DivvyUpICOFactory is Owned {
 
     event Create(bytes32 name,
         bytes32 symbol,
-        uint8 dividendDivisor,
+        uint8 buyDividendDivisor,
+        uint8 sellDividendDivisor,
         uint8 decimals,
         uint256 initialPrice,
         uint256 incrementPrice,
@@ -166,7 +168,7 @@ contract DivvyUpICOFactory is Owned {
     function create(        
         bytes32 name, // Name of the DivvyUp
         bytes32 symbol,  // ERC20 Symbol fo the DivvyUp
-        uint8 dividendDivisor, // Amount to divide incoming counter by as fees for dividens. Example: 3 for 33%, 10 for 10%, 100 for 1%
+        uint8 buyDividendDivisor, // Amount to divide incoming counter by as fees for dividens. Example: 3 for 33%, 10 for 10%, 100 for 1%
         uint8 decimals, // Number of decimals the token has. Example: 18
         uint256 initialPrice, // Starting price per token. Example: 0.0000001 ether
         uint256 incrementPrice, // How much to increment the price by. Example: 0.00000001 ether
@@ -181,11 +183,11 @@ contract DivvyUpICOFactory is Owned {
         public 
         returns (DivvyUpICO)
     {
-        DivvyUpICO ico = new DivvyUpICO(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, referrals, referralDivisor, launchBlockHeight, launchBalanceTarget, launchBalanceCap, counter, this);
+        DivvyUpICO ico = new DivvyUpICO(name, symbol, buyDividendDivisor, 0, decimals, initialPrice, incrementPrice, magnitude, referrals, referralDivisor, launchBlockHeight, launchBalanceTarget, launchBalanceCap, counter, this);
         ico.changeOwner(msg.sender);
         registry.push(ico);
         
-        emit Create(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, 0, 0, launchBalanceCap, msg.sender);        
+        emit Create(name, symbol, buyDividendDivisor, 0, decimals, initialPrice, incrementPrice, magnitude, 0, 0, launchBalanceCap, msg.sender);        
         return ico;   
     }
 
@@ -219,7 +221,8 @@ contract DivvyUpICO is Owned, ERC20Interface {
     bytes32 internal iconame;
     bytes32 internal icosymbol;
     uint8 public finalDecimals;
-    uint8 public dividendDivisor;
+    uint8 public buyDividendDivisor;
+    uint8 public sellDividendDivisor;
     uint256 public initialPrice;
     uint256 public incrementPrice;
     uint256 public magnitude;
@@ -286,10 +289,11 @@ contract DivvyUpICO is Owned, ERC20Interface {
             result := mload(add(source, 32))
         }
     }
-    function DivvyUpICO(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 anInitialPrice, uint256 anIncrementPrice, uint256 aMagnitude, uint8 aReferrals, uint256 aReferralDivisor, uint256 aLaunchBlockHeight, uint256 aLaunchBalanceTarget, uint256 aLaunchBalanceCap, address aCounter, address aFactory) public {
+    function DivvyUpICO(bytes32 aName, bytes32 aSymbol, uint8 aBuyDividendDivisor, uint8 aSellDividendDivisor, uint8 aDecimals, uint256 anInitialPrice, uint256 anIncrementPrice, uint256 aMagnitude, uint8 aReferrals, uint256 aReferralDivisor, uint256 aLaunchBlockHeight, uint256 aLaunchBalanceTarget, uint256 aLaunchBalanceCap, address aCounter, address aFactory) public {
         _name = aName;
         _symbol = aSymbol;
-        dividendDivisor = aDividendDivisor;
+        buyDividendDivisor = aBuyDividendDivisor;
+        sellDividendDivisor = aSellDividendDivisor;
         finalDecimals = aDecimals;
         initialPrice = anInitialPrice;
         incrementPrice = anIncrementPrice;
@@ -348,7 +352,7 @@ contract DivvyUpICO is Owned, ERC20Interface {
 
     function launch() public hasNotLaunched isReadyToLaunch returns (address) {
         hasLaunched = true;
-        destination = factory.create(_name, _symbol, dividendDivisor, finalDecimals, initialPrice, incrementPrice, magnitude, referrals, referralDivisor, counter);
+        destination = factory.create(_name, _symbol, buyDividendDivisor, sellDividendDivisor, finalDecimals, initialPrice, incrementPrice, magnitude, referrals, referralDivisor, counter);
         Owned(destination).changeOwner(owner);
         if(totalDeposits > 0){
             if(counter == 0x0){
