@@ -125,8 +125,6 @@ contract DivvyUpFactoryInterface {
         uint256 initialPrice, // Starting price per token. Example: 0.0000001 ether
         uint256 incrementPrice, // How much to increment the price by. Example: 0.00000001 ether
         uint256 magnitude, //magnitude to multiply the fees by before distribution. Example: 2**64
-        uint8 referrals, // Referrals disallowed, allowed, or mandatory. Example: 0 disallowed, 1 allowed, 2 mandatory
-        uint256 referralDivisor, // Amount to divide the fees by. Example: 3 for 30%, 10 for 10%, 100 for 1%
         address counter // The counter currency to accept. Example: 0x0 for ETH, otherwise the ERC20 token address.
      )
         public 
@@ -158,14 +156,12 @@ contract DivvyUpFactory is Owned {
         uint256 initialPrice, // Starting price per token. Example: 0.0000001 ether
         uint256 incrementPrice, // How much to increment the price by. Example: 0.00000001 ether
         uint256 magnitude, //magnitude to multiply the fees by before distribution. Example: 2**64
-        uint8 referrals, // Referrals disallowed, allowed, or mandatory. Example: 0 disallowed, 1 allowed, 2 mandatory
-        uint256 referralDivisor, // Amount to divide the fees by. Example: 3 for 30%, 10 for 10%, 100 for 1%
         address counter // The counter currency to accept. Example: 0x0 for ETH, otherwise the ERC20 token address.
      )
         public 
         returns(address)
     {
-        DivvyUp divvyUp = new DivvyUp(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, referrals, referralDivisor, counter);
+        DivvyUp divvyUp = new DivvyUp(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, counter);
         divvyUp.changeOwner(msg.sender);
         registry.push(divvyUp);
         emit Create(name, symbol, dividendDivisor, decimals, initialPrice, incrementPrice, magnitude, msg.sender);
@@ -211,17 +207,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     
     // only people with profits
     modifier onlyDividendHolders() {
-        require(dividendDivisor > 0 && myDividends(true) > 0);
-        _;
-    }
-
-    modifier referralsAllowed(){
-        require(referrals > 0);
-        _;
-    }
-
-    modifier referralsNotMandatory(){
-        require(referrals != 2);
+        require(dividendDivisor > 0 && myDividends() > 0);
         _;
     }
 
@@ -236,8 +222,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     event Purchase(
         address indexed customerAddress,
         uint256 incomingCounter,
-        uint256 tokensMinted,
-        address indexed referredBy
+        uint256 tokensMinted
     );
     
     event Sell(
@@ -267,9 +252,6 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     uint256 public tokenPriceInitial;// = 0.0000001 ether;
     uint256 public tokenPriceIncremental;// = 0.00000001 ether;
     uint256 public magnitude;// = 2**64;
-    //0 = ignored, 1 = allowed, 2 = mandatory
-    uint8 public referrals;
-    uint256 public referralsDivisor;
     address counter;
 
    /*================================
@@ -277,8 +259,6 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     ================================*/
     // amount of tokens for each address
     mapping(address => uint256) internal tokenBalanceLedger;
-    // amount of referral bonus for each address
-    mapping(address => uint256) internal referralBalance;
     // amount of eth withdrawn
     mapping(address => int256) internal payoutsTo;
     // amount of tokens allowed to someone else 
@@ -294,7 +274,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     /**
     * -- APPLICATION ENTRY POINTS --  
     */
-    function DivvyUp(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 aTokenPriceInitial, uint256 aTokenPriceIncremental, uint256 aMagnitude, uint8 aReferrals, uint256 aReferralsDivisor, address aCounter) 
+    function DivvyUp(bytes32 aName, bytes32 aSymbol, uint8 aDividendDivisor, uint8 aDecimals, uint256 aTokenPriceInitial, uint256 aTokenPriceIncremental, uint256 aMagnitude, address aCounter) 
     public {
         require(aDividendDivisor < 100);
         name = aName;
@@ -304,10 +284,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         tokenPriceInitial = aTokenPriceInitial;
         tokenPriceIncremental = aTokenPriceIncremental;
         magnitude = aMagnitude;
-        referrals = aReferrals;
         counter = aCounter;    
-        referralsDivisor = aReferralsDivisor;
-        require(referrals <= 2);
     }
     
     /**
@@ -331,7 +308,6 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     function purchaseTokens()
         public
         payable
-        referralsNotMandatory
         returns(uint256)
     {
         if(msg.value > 0){
@@ -341,27 +317,11 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     }
     
     /**
-     * Converts all incoming counter to tokens for the caller, and passes on the referral address
-     */
-    function purchaseTokensWithReferrer(address referredBy)
-        public
-        payable
-        referralsAllowed
-        returns(uint256)
-    {
-        if(msg.value > 0){
-            require(counter == 0x0);
-        }
-        return purchaseTokens(msg.value, referredBy);
-    }
-
-    /**
      * Converts all incoming counter to tokens for the caller
      */
     function purchaseTokensERC20(uint256 amount)
         public
         erc20Destination
-        referralsNotMandatory
         returns(uint256)
     {
         return purchaseTokensERC20WithReferrer(amount, 0x0);
@@ -370,24 +330,23 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     /**
      * Converts all incoming counter to tokens for the caller
      */
-    function purchaseTokensERC20WithReferrer(uint256 amount, address referrer)
+    function purchaseTokensERC20WithReferrer(uint256 amount, address)
         public
         erc20Destination
-        referralsAllowed
+
         returns(uint256)
     {
         require(ERC20Interface(counter).transferFrom(msg.sender, this, amount));
-        return purchaseTokens(amount, referrer);
+        return purchaseTokens(amount, 0x0);
     }
-    
-    /**
+
+        /**
      * Fallback function to handle counter that was send straight to the contract.
      * Causes tokens to be purchased.
      */
     function()
         payable
         public
-        referralsNotMandatory
     {
         if(msg.value > 0){
             require(counter == 0x0);
@@ -395,6 +354,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         purchaseTokens(msg.value, 0x0);
     }
     
+     
     /**
      * Converts all of caller's dividends to tokens.
      */
@@ -404,15 +364,11 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         returns (uint256)
     {
         // fetch dividends
-        uint256 dividends = myDividends(false); // retrieve ref. bonus later in the code
-        
+        uint256 dividends = myDividends(); 
+       
         // pay out the dividends virtually
         address customerAddress = msg.sender;
         payoutsTo[customerAddress] += (int256) (dividends * magnitude);
-        
-        // retrieve ref. bonus
-        dividends += referralBalance[customerAddress];
-        referralBalance[customerAddress] = 0;
         
         // dispatch a buy order with the virtualized "withdrawn dividends" if we have dividends
         uint256 tokens = purchaseTokens(dividends, 0);
@@ -448,20 +404,11 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     {
         // setup data
         address customerAddress = msg.sender;
-        uint256 dividends = myDividends(false); // get ref. bonus later in the code
-        
+        uint256 dividends = myDividends(); 
+
         // update dividend tracker
         payoutsTo[customerAddress] += (int256) (dividends * magnitude);
-        
-        // add ref. bonus
-        dividends += referralBalance[customerAddress];
-        referralBalance[customerAddress] = 0;
-        if(counter == 0x0){
-            customerAddress.transfer(dividends);
-        }else{
-            ERC20Interface(counter).transfer(customerAddress, dividends);
-        }
-        
+                
         // fire event
         emit Withdraw(customerAddress, dividends);
     }
@@ -503,7 +450,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     
     /**
      * Transfer tokens from the caller to a new holder.
-     * Transfering ownership of tokens requires settling ououtstanding dividends
+     * Transfering ownership of tokens requires settling outstanding dividends
      * and transfering them back. You can therefore send 0 tokens to this contract to
      * trigger your withdraw.
      */
@@ -526,9 +473,9 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
 
             return true;
         }
-        
+       
         // Deal with outstanding dividends first
-        if(myDividends(true) > 0) {
+        if(myDividends() > 0) {
             withdraw();
         }
         
@@ -557,11 +504,13 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         // fire event
         emit Transfer(customerAddress, toAddress, amountOfTokens);
 
-        // ERC20
+
         return true;
        
     }
-    
+
+    // ERC20 
+
     function approve(address spender, uint tokens) public returns (bool success) {
         allowed[msg.sender][spender] = tokens;
         emit Approval(msg.sender, spender, tokens);
@@ -677,18 +626,17 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     }
     
     /**
-     * Retrieve the dividends owned by the caller.
-     * If `includeReferralBonus` is to to 1/true, the referral bonus will be included in the calculations.
-     * The reason for this, is that in the frontend, we will want to get the total divs (global + ref)
-     * But in the internal calculations, we want them separate. 
-     */ 
-    function myDividends(bool includeReferralBonus) 
+    * Retrieve the dividends owned by the caller.
+    */
+
+    function myDividends() 
         public 
         view 
         returns(uint256)
     {
         address customerAddress = msg.sender;
-        return includeReferralBonus ? dividendsOf(customerAddress) + referralBalance[customerAddress] : dividendsOf(customerAddress) ;
+
+        return (uint256) ((int256)(profitPerShare * tokenBalanceLedger[customerAddress]) - payoutsTo[customerAddress]) / magnitude;
     }
     
     /**
@@ -702,16 +650,6 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         return tokenBalanceLedger[customerAddress];
     }
     
-    /**
-     * Retrieve the dividend balance of any single address.
-     */
-    function dividendsOf(address customerAddress)
-        view
-        public
-        returns(uint256)
-    {
-        return (uint256) ((int256)(profitPerShare * tokenBalanceLedger[customerAddress]) - payoutsTo[customerAddress]) / magnitude;
-    }
     
     /**
      * Return the buy price of 1 individual token.
@@ -784,7 +722,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     /*==========================================
     =            INTERNAL FUNCTIONS            =
     ==========================================*/
-    function purchaseTokens(uint256 incomingCounter, address referredBy)
+    function purchaseTokens(uint256 incomingCounter, address)
         internal
         returns(uint256)
     {
@@ -792,37 +730,20 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
             return reinvestDividends();
         }
 
-        // mandatory referrals
-        if(referrals == 2){
-            require(referredBy != 0x0 && referredBy != customerAddress); 
-            if(tokenSupply > 0){
-                require(balanceOf(referredBy) > 0);
-            }
-        }
 
         
         // book keeping
         address customerAddress = msg.sender;
-        uint256 undividedDividends = dividendDivisor > 0 ? SafeMath.div(incomingCounter, dividendDivisor) : 0;
-        uint256 referralBonus = referrals == 0 ? 0 : SafeMath.div(undividedDividends, referralsDivisor);
-        uint256 dividends = SafeMath.sub(undividedDividends, referralBonus);
-        uint256 taxedCounter = SafeMath.sub(incomingCounter, undividedDividends);
+//     uint256 undividedDividends = dividendDivisor > 0 ? SafeMath.div(incomingCounter, dividendDivisor) : 0;
+//this was ref bonus 
+        uint256 dividends = dividendDivisor > 0 ? SafeMath.div(incomingCounter, dividendDivisor) : 0;
+        uint256 taxedCounter = SafeMath.sub(incomingCounter, dividends);
         uint256 amountOfTokens = counterToTokens(taxedCounter);
         uint256 fee = dividends * magnitude;
  
         // prevents overflow
         assert(amountOfTokens > 0 && (SafeMath.add(amountOfTokens,tokenSupply) > tokenSupply));
-        
-        // is the user referred by a masternode?
-        if(referrals != 0 && referredBy != 0x0 && referredBy != customerAddress && dividendDivisor > 0x0){
-            // wealth redistribution
-            referralBalance[referredBy] = SafeMath.add(referralBalance[referredBy], referralBonus);
-        } else {
-            // no ref purchase
-            // add the referral bonus back to the global dividends cake
-            dividends = SafeMath.add(dividends, referralBonus);
-        }
-        
+               
         // Start making sure we can do the math. No token holders means no dividends, yet.
         if(tokenSupply > 0){
             
@@ -848,7 +769,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         payoutsTo[customerAddress] += updatedPayouts;
         
         // fire events
-        emit Purchase(customerAddress, incomingCounter, amountOfTokens, referredBy);
+        emit Purchase(customerAddress, incomingCounter, amountOfTokens);
         emit Transfer(0x0, customerAddress, amountOfTokens);
         return amountOfTokens;
     }
