@@ -313,9 +313,10 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         if(msg.value > 0){
             require(counter == 0x0);
         }
-        return purchaseTokens(msg.value, 0x0);
+        return purchaseTokens(msg.value);
     }
     
+
     /**
      * Converts all incoming counter to tokens for the caller
      */
@@ -324,21 +325,10 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         erc20Destination
         returns(uint256)
     {
-        return purchaseTokensERC20WithReferrer(amount, 0x0);
-    }
-
-    /**
-     * Converts all incoming counter to tokens for the caller
-     */
-    function purchaseTokensERC20WithReferrer(uint256 amount, address)
-        public
-        erc20Destination
-
-        returns(uint256)
-    {
         require(ERC20Interface(counter).transferFrom(msg.sender, this, amount));
-        return purchaseTokens(amount, 0x0);
+        return purchaseTokens(amount);
     }
+
 
         /**
      * Fallback function to handle counter that was send straight to the contract.
@@ -351,7 +341,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         if(msg.value > 0){
             require(counter == 0x0);
         }
-        purchaseTokens(msg.value, 0x0);
+        purchaseTokens(msg.value);
     }
     
      
@@ -371,7 +361,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
         payoutsTo[customerAddress] += (int256) (dividends * magnitude);
         
         // dispatch a buy order with the virtualized "withdrawn dividends" if we have dividends
-        uint256 tokens = purchaseTokens(dividends, 0);
+        uint256 tokens = purchaseTokens(dividends);
         
         // fire event
         emit Reinvestment(customerAddress, dividends, tokens);
@@ -722,7 +712,7 @@ contract DivvyUp is ERC20Interface, Owned, DivvyUpInterface {
     /*==========================================
     =            INTERNAL FUNCTIONS            =
     ==========================================*/
-    function purchaseTokens(uint256 incomingCounter, address)
+    function purchaseTokens(uint256 incomingCounter)
         internal
         returns(uint256)
     {
